@@ -45,26 +45,52 @@ If all LLM attempts fail, the image is not rendered with a local heuristic subst
 
 ## Batch Folders
 
-Process a folder of RAW images concurrently:
+Process a folder of RAW images concurrently. Each image is edited fully, then routed by
+`worth_saving` into either `accepted/` (keepers) or `suggested_discarded/` (model thinks you
+can drop it):
 
 ```bash
 python -m photo_director batch raw_folder \
   --output-dir outputs/batch_run \
   --workers 4 \
-  --failed-list outputs/batch_run/failed.jsonl
+  --worth-saving-threshold 0.25
 ```
 
 Use `--recursive` to search nested folders.
 
-Failed images are appended to a JSONL file. Retry only those images later with the same input folder for path resolution:
+Output layout:
+
+```text
+outputs/batch_run/
+  accepted/
+    previews/
+    analysis/
+    adjustments/
+    edited/
+    masks/
+  suggested_discarded/
+    previews/
+    analysis/
+    adjustments/
+    edited/
+    masks/
+  failed.jsonl
+  suggested_discarded.jsonl
+```
+
+Failed images are appended to `<output-dir>/failed.jsonl`. Retry only those images later with
+the same input folder for path resolution:
 
 ```bash
 python -m photo_director batch raw_folder \
-  --output-dir outputs/retry_run \
-  --failed-list-input outputs/batch_run/failed.jsonl \
-  --failed-list outputs/retry_run/failed.jsonl \
+  --output-dir outputs/batch_run \
+  --retry-failed \
   --workers 2
 ```
+
+The LLM returns `worth_saving` (0–1) and `discard_reason` in the same edit-plan response.
+Images with `worth_saving <= --worth-saving-threshold` route to `suggested_discarded/`; the
+rest go to `accepted/`. Edits are always applied in both buckets.
 
 ## Localized Editing
 
@@ -92,7 +118,7 @@ Save the feathered masks for debugging with `--mask-debug-dir`:
 python -m photo_director edit input.DNG --output outputs/final.jpg --mask-debug-dir outputs/masks
 ```
 
-Batch runs always save mask debug PNGs under `<output-dir>/masks/<stem>_<target>.png`.
+Batch runs always save mask debug PNGs under `<output-dir>/<bucket>/masks/<stem>_<target>.png`.
 
 The adjustment JSON (written via `--adjustments`, or always in batch mode) includes a
 `localized_application` array recording, per target, whether it was `applied` or `skipped`,

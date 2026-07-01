@@ -5,6 +5,15 @@ from typing import Any
 
 
 SUPPORTED_LOCALIZED_TARGETS: tuple[str, ...] = ('sky', 'subject')
+ACCEPTED_BUCKET = 'accepted'
+SUGGESTED_DISCARDED_BUCKET = 'suggested_discarded'
+DEFAULT_WORTH_SAVING_THRESHOLD = 0.25
+
+
+def bucket_for_worth_saving(worth_saving: float, threshold: float) -> str:
+    if worth_saving <= threshold:
+        return SUGGESTED_DISCARDED_BUCKET
+    return ACCEPTED_BUCKET
 
 SLIDER_LIMITS: dict[str, tuple[float, float]] = {
     "temperature": (-100.0, 100.0),
@@ -81,6 +90,8 @@ class EditPlan:
     localized_adjustments: list[LocalizedAdjustment] = field(default_factory=list)
     rationale: str = ""
     confidence: float = 0.0
+    worth_saving: float = 1.0
+    discard_reason: str = ""
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "EditPlan":
@@ -97,6 +108,8 @@ class EditPlan:
             localized_adjustments=localized,
             rationale=str(data.get("rationale", "")),
             confidence=max(0.0, min(1.0, float(data.get("confidence", 0.0)))),
+            worth_saving=max(0.0, min(1.0, float(data.get("worth_saving", 1.0)))),
+            discard_reason=str(data.get("discard_reason", "")),
         )
 
     @property
@@ -106,15 +119,20 @@ class EditPlan:
     def final_settings(self) -> GlobalAdjustments:
         return add_slider_values(self.baseline_settings, self.global_delta)
 
-    def to_dict(self) -> dict[str, Any]:
-        return {
+    def to_dict(self, worth_saving_threshold: float | None = None) -> dict[str, Any]:
+        payload: dict[str, Any] = {
             "baseline_settings": self.baseline_settings.to_dict(),
             "global_delta": self.global_delta.to_dict(),
             "final_settings": self.final_settings().to_dict(),
             "localized_adjustments": [item.to_dict() for item in self.localized_adjustments],
             "rationale": self.rationale,
             "confidence": self.confidence,
+            "worth_saving": self.worth_saving,
+            "discard_reason": self.discard_reason,
         }
+        if worth_saving_threshold is not None:
+            payload["worth_saving_threshold"] = worth_saving_threshold
+        return payload
 
 
 EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
@@ -123,7 +141,14 @@ EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
     "schema": {
         "type": "object",
         "additionalProperties": False,
-        "required": ["global_delta", "localized_adjustments", "rationale", "confidence"],
+        "required": [
+            "global_delta",
+            "localized_adjustments",
+            "rationale",
+            "confidence",
+            "worth_saving",
+            "discard_reason",
+        ],
         "properties": {
             "global_delta": {
                 "type": "object",
@@ -174,6 +199,8 @@ EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
             },
             "rationale": {"type": "string"},
             "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+            "worth_saving": {"type": "number", "minimum": 0, "maximum": 1},
+            "discard_reason": {"type": "string"},
         },
     },
 }
