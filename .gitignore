@@ -4,6 +4,7 @@ __pycache__/
 venv/
 .env
 *.log
+.DS_Store
 
 # Generated photo outputs
 *_preview.jpg

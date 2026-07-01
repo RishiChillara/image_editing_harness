@@ -11,7 +11,7 @@ from typing import Any
 
 import requests
 
-from .schema import EDIT_PLAN_JSON_SCHEMA, EditPlan, GlobalAdjustments
+from .schema import EDIT_PLAN_JSON_SCHEMA, SUPPORTED_LOCALIZED_TARGETS, EditPlan, GlobalAdjustments
 
 OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -142,13 +142,17 @@ def request_edit_plan(
     if not api_key:
         raise RuntimeError("OPENROUTER_API_KEY is required to request an edit plan.")
 
+    supported_targets = ' or '.join(f"'{target}'" for target in SUPPORTED_LOCALIZED_TARGETS)
     system_prompt = (
         "You are Photo Director, a professional RAW photo editing director. "
         "Interpret the user's aesthetic intent and the technical image analysis. "
         "Return conservative, production-ready Lightroom-style slider deltas from the provided baseline_settings. "
         "Do not return absolute final slider values. "
         "The response must be only the requested JSON object. "
-        "Do not invent unsupported local masks; use localized_adjustments only when a target is obvious."
+        f"The only supported localized_adjustments targets are {supported_targets}; "
+        "the renderer silently skips any other target, so never invent a different one "
+        "(e.g. a person's name, 'runners', 'foreground'). "
+        "Omit localized_adjustments entirely rather than guessing when neither target is obvious."
     )
     user_text = {
         "intent": intent,

@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
+SUPPORTED_LOCALIZED_TARGETS: tuple[str, ...] = ('sky', 'subject')
+
 SLIDER_LIMITS: dict[str, tuple[float, float]] = {
     "temperature": (-100.0, 100.0),
     "tint": (-100.0, 100.0),
@@ -148,7 +150,7 @@ EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
                     "additionalProperties": False,
                     "required": ["target", "delta"],
                     "properties": {
-                        "target": {"type": "string"},
+                        "target": {"type": "string", "enum": list(SUPPORTED_LOCALIZED_TARGETS)},
                         "delta": {
                             "type": "object",
                             "additionalProperties": False,
