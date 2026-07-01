@@ -28,10 +28,11 @@ python -m photo_director edit input.NEF \
   --output outputs/final.jpg
 ```
 
-By default, the LLM model is `openrouter/free`, OpenRouter's free model router. Override it with:
+By default, the LLM model is `google/gemma-4-26b-a4b-it:free`, a free vision-capable OpenRouter
+model that supports structured JSON output. Override it with:
 
 ```bash
-python -m photo_director edit input.ARW --model openrouter/free
+python -m photo_director edit input.ARW --model google/gemma-4-26b-a4b-it:free
 ```
 
 The LLM call is retried with exponential backoff. By default, each image gets the initial OpenRouter request plus two retries:

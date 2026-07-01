@@ -91,7 +91,11 @@ def batch_command(args: argparse.Namespace) -> int:
 
 def add_common_llm_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--intent", default="Auto-Edit", help="Aesthetic direction for the LLM.")
-    parser.add_argument("--model", default="openrouter/free", help="OpenRouter model or router to use.")
+    parser.add_argument(
+        "--model",
+        default="google/gemma-4-26b-a4b-it:free",
+        help="OpenRouter model or router to use.",
+    )
     parser.add_argument("--preview-size", type=int, default=1400, help="Maximum preview width/height.")
     parser.add_argument("--quality", type=int, default=95, help="JPEG quality for final output.")
     parser.add_argument("--timeout", type=int, default=90, help="OpenRouter request timeout in seconds.")

@@ -132,7 +132,7 @@ def request_edit_plan(
     analysis: dict[str, Any],
     preview_path: Path,
     intent: str,
-    model: str = "openrouter/free",
+    model: str = "google/gemma-4-26b-a4b-it:free",
     api_key: str | None = None,
     timeout: int = 90,
     max_retries: int = 2,
