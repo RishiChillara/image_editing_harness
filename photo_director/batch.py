@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
+from tqdm import tqdm
+
 from .analysis import analyze_raw, write_analysis
 from .engine import apply_edit_plan
 from .llm import request_edit_plan
@@ -154,6 +156,9 @@ def process_jobs(
 ) -> list[EditResult]:
     writer = FailedListWriter(failed_list)
     results: list[EditResult] = []
+    job_list = list(jobs)
+    succeeded = 0
+    failed_count = 0
     with ThreadPoolExecutor(max_workers=max(1, workers)) as executor:
         futures = {
             executor.submit(
@@ -167,15 +172,20 @@ def process_jobs(
                 max_retries,
                 retry_backoff,
             ): job
-            for job in jobs
+            for job in job_list
         }
-        for future in as_completed(futures):
-            result = future.result()
-            results.append(result)
-            if result.ok:
-                print(f"OK {result.raw_path} -> {result.output_path}")
-            else:
-                error = result.error or "unknown error"
-                print(f"FAILED {result.raw_path}: {error}")
-                writer.append(result.raw_path, error)
+        with tqdm(total=len(futures), desc="Processing", unit="img") as progress:
+            for future in as_completed(futures):
+                result = future.result()
+                results.append(result)
+                if result.ok:
+                    succeeded += 1
+                    tqdm.write(f"OK {result.raw_path} -> {result.output_path}")
+                else:
+                    failed_count += 1
+                    error = result.error or "unknown error"
+                    tqdm.write(f"FAILED {result.raw_path}: {error}")
+                    writer.append(result.raw_path, error)
+                progress.set_postfix(ok=succeeded, failed=failed_count, refresh=False)
+                progress.update(1)
     return results

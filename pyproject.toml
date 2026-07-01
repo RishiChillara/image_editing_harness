@@ -9,6 +9,7 @@ dependencies = [
   "rawpy>=0.19",
   "requests>=2.31",
   "opencv-python-headless>=4.9",
+  "tqdm>=4.66",
 ]
 
 [project.optional-dependencies]

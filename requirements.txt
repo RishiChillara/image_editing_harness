@@ -4,4 +4,5 @@ rawpy>=0.19
 requests>=2.31
 exifread>=3.0
 opencv-python-headless>=4.9
+tqdm>=4.66
 pytest>=8.0
