@@ -131,6 +131,8 @@ the mask confidence, and (when applied and debugging is enabled) the mask file p
 ]
 ```
 
+TODO: Replace CV based approaches with https://github.com/facebookresearch/sam2
+
 ## Architecture
 
 1. `photo_director.analysis` reads the RAW file with RawPy, renders a color preview, extracts EXIF when available, computes histograms, clipping, and dominant colors.
