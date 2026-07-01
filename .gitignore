@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+*.log
+
+# Generated photo outputs
+*_preview.jpg
+*_edited.jpg
+outputs/
+input_raws/

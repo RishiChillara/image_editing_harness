@@ -1,0 +1,5 @@
+numpy>=1.24
+Pillow>=10.0
+rawpy>=0.19
+requests>=2.31
+exifread>=3.0
