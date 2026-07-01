@@ -33,6 +33,7 @@ class EditJob:
     analysis_path: Path
     adjustments_path: Path
     output_path: Path
+    masks_dir: Path
 
 
 @dataclass(slots=True)
@@ -101,6 +102,7 @@ def build_job(raw_path: Path, output_dir: Path) -> EditJob:
         analysis_path=output_dir / "analysis" / f"{stem}_analysis.json",
         adjustments_path=output_dir / "adjustments" / f"{stem}_adjustments.json",
         output_path=output_dir / "edited" / f"{stem}_edited.jpg",
+        masks_dir=output_dir / "masks",
     )
 
 
@@ -126,9 +128,13 @@ def process_job(
             max_retries=max_retries,
             retry_backoff=retry_backoff,
         )
+        localized_application = apply_edit_plan(
+            job.raw_path, job.output_path, plan, quality=quality, mask_debug_dir=job.masks_dir
+        )
+        plan_dict = plan.to_dict()
+        plan_dict['localized_application'] = [record.to_dict() for record in localized_application]
         job.adjustments_path.parent.mkdir(parents=True, exist_ok=True)
-        job.adjustments_path.write_text(json.dumps(plan.to_dict(), indent=2), encoding="utf-8")
-        apply_edit_plan(job.raw_path, job.output_path, plan, quality=quality)
+        job.adjustments_path.write_text(json.dumps(plan_dict, indent=2), encoding="utf-8")
         return EditResult(raw_path=job.raw_path, output_path=job.output_path, ok=True)
     except Exception as exc:
         return EditResult(raw_path=job.raw_path, output_path=None, ok=False, error=str(exc))

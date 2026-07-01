@@ -65,10 +65,58 @@ python -m photo_director batch raw_folder \
   --workers 2
 ```
 
+## Localized Editing
+
+When the LLM returns `localized_adjustments` (currently `sky` and `subject`), the engine
+builds a heuristic feathered mask for each target with OpenCV and blends the target's
+delta sliders into the globally-adjusted image inside that mask. No extra CLI step is
+required; this happens automatically for any plan that includes localized adjustments.
+
+- `sky` first tries a gradient border-curve detector inspired by Shen & Wang (2013), "Sky Region
+  Detection in a Single Image for Autonomous Ground Robot Navigation": it sweeps a set of gradient
+  thresholds, builds a per-column sky/ground border for each, and keeps the border whose two sides
+  separate best by color. If that isn't confident (e.g. a very noisy or textureless frame), it falls
+  back to a position/luminance/saturation/texture heuristic.
+- `subject` first tries a classic HOG + linear-SVM pedestrian detector refined into a soft mask with
+  GrabCut (both run on a downscaled copy for speed). If no confident person is detected, it falls
+  back to a conservative center/lower-third Gaussian heuristic that is intentionally kept below the
+  confidence threshold, so weak/uncertain subject masks are skipped rather than applied.
+- If a mask cannot be built with enough confidence (or mask generation raises an error), that
+  localized adjustment is skipped; the rest of the image (global edits, and any other localized
+  adjustment) is still applied. A failed local mask never fails the whole image.
+
+Save the feathered masks for debugging with `--mask-debug-dir`:
+
+```bash
+python -m photo_director edit input.DNG --output outputs/final.jpg --mask-debug-dir outputs/masks
+```
+
+Batch runs always save mask debug PNGs under `<output-dir>/masks/<stem>_<target>.png`.
+
+The adjustment JSON (written via `--adjustments`, or always in batch mode) includes a
+`localized_application` array recording, per target, whether it was `applied` or `skipped`,
+the mask confidence, and (when applied and debugging is enabled) the mask file path:
+
+```json
+"localized_application": [
+  {"target": "sky", "status": "applied", "mask_confidence": 0.78, "mask_path": "outputs/masks/image_sky.png"},
+  {"target": "subject", "status": "skipped", "mask_confidence": 0.3, "reason": "No confident mask available for target."}
+]
+```
+
 ## Architecture
 
 1. `photo_director.analysis` reads the RAW file with RawPy, renders a color preview, extracts EXIF when available, computes histograms, clipping, and dominant colors.
 2. `photo_director.llm` sends the preview plus metadata, baseline settings, and user intent to OpenRouter using structured JSON schema output. The model returns slider deltas, not absolute final settings.
-3. `photo_director.engine` adds the model deltas to the baseline settings, maps the final settings into deterministic image operations, and exports the edited image.
+3. `photo_director.engine` adds the model deltas to the baseline settings, maps the final settings into deterministic image operations, exports the edited image, and blends in any confident localized adjustments from `photo_director.masks`.
+4. `photo_director.masks` builds OpenCV-based feathered masks for supported localized targets (`sky`, `subject`), each with a primary detector and a simpler heuristic fallback, and reports a confidence score used to decide whether to apply or skip each one.
 
-The first version supports global edits. The schema already includes a `localized_adjustments` array for future OpenCV or segmentation-backed masks.
+## Tests
+
+```bash
+pip install -r requirements.txt
+pytest
+```
+
+The engine integration tests use the sample RAW file linked at `input_raws/DSC02765.dng` and are
+skipped automatically if that fixture is not present in your environment.

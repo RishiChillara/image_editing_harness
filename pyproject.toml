@@ -8,10 +8,12 @@ dependencies = [
   "Pillow>=10.0",
   "rawpy>=0.19",
   "requests>=2.31",
+  "opencv-python-headless>=4.9",
 ]
 
 [project.optional-dependencies]
 exif = ["exifread>=3.0"]
+dev = ["pytest>=8.0"]
 
 [project.scripts]
 photo-director = "photo_director.cli:main"

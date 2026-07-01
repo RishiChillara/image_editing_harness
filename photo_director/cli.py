@@ -18,6 +18,7 @@ def edit_command(args: argparse.Namespace) -> int:
     raw_path = Path(args.raw_file)
     preview_path = Path(args.preview) if args.preview else _default_path(raw_path, "_preview.jpg")
     output_path = Path(args.output) if args.output else _default_path(raw_path, "_edited.jpg")
+    mask_debug_dir = Path(args.mask_debug_dir) if args.mask_debug_dir else None
 
     analysis = analyze_raw(raw_path, preview_path, args.preview_size)
     if args.analysis:
@@ -39,16 +40,22 @@ def edit_command(args: argparse.Namespace) -> int:
         print(f"Failed to get edit plan: {exc}", file=sys.stderr)
         return 1
     print(f"Edit plan: {plan}")
+    print(f"Applying edit plan to {raw_path} and writing to {output_path}")
+    localized_application = apply_edit_plan(
+        raw_path, output_path, plan, quality=args.quality, mask_debug_dir=mask_debug_dir
+    )
+
+    plan_dict = plan.to_dict()
+    plan_dict['localized_application'] = [record.to_dict() for record in localized_application]
+
     if args.adjustments:
         print(f"Writing adjustments to {args.adjustments}")
         adjustments_path = Path(args.adjustments).expanduser().resolve()
         adjustments_path.parent.mkdir(parents=True, exist_ok=True)
-        adjustments_path.write_text(json.dumps(plan.to_dict(), indent=2), encoding="utf-8")
-    print(f"Applying edit plan to {raw_path} and writing to {output_path}")
+        adjustments_path.write_text(json.dumps(plan_dict, indent=2), encoding="utf-8")
 
-    apply_edit_plan(raw_path, output_path, plan, quality=args.quality)
     print(f"Final output: {output_path}")
-    print(json.dumps({"preview": str(preview_path), "output": str(output_path), "plan": plan.to_dict()}, indent=2))
+    print(json.dumps({"preview": str(preview_path), "output": str(output_path), "plan": plan_dict}, indent=2))
     return 0
 
 
@@ -105,6 +112,9 @@ def build_parser() -> argparse.ArgumentParser:
     edit.add_argument("--analysis", help="Optional path for analysis JSON.")
     edit.add_argument("--adjustments", help="Optional path for LLM adjustment JSON.")
     edit.add_argument("--output", help="Where to write the final edited JPEG.")
+    edit.add_argument(
+        "--mask-debug-dir", help="Optional directory to save localized mask debug PNGs."
+    )
     add_common_llm_args(edit)
     edit.set_defaults(func=edit_command)
 

@@ -6,6 +6,7 @@ import numpy as np
 import rawpy
 from PIL import Image, ImageFilter
 
+from .masks import LocalizedApplicationRecord, build_mask_for_target, save_mask_debug_image
 from .schema import EditPlan, GlobalAdjustments
 
 
@@ -67,7 +68,82 @@ def _clarity(image: np.ndarray, amount: float) -> np.ndarray:
     return base + (base - blurred) * (amount / 120.0)
 
 
-def apply_edit_plan(raw_path: Path, output_path: Path, plan: EditPlan, quality: int = 95) -> None:
+def _apply_adjustments(image: np.ndarray, adjustments: GlobalAdjustments) -> np.ndarray:
+    result = _white_balance(image, adjustments)
+    result = _tone_curve(result, adjustments)
+    result = _color_presence(result, adjustments)
+    return np.clip(_clarity(result, adjustments.clarity), 0.0, 1.0)
+
+
+def _apply_localized_adjustments(
+    base_image: np.ndarray,
+    global_image: np.ndarray,
+    plan: EditPlan,
+    raw_stem: str,
+    mask_debug_dir: Path | None,
+) -> tuple[np.ndarray, list[LocalizedApplicationRecord]]:
+    """Blend localized deltas into `global_image`, masked by heuristic target masks.
+
+    Masks are derived from `base_image` (before global tone changes) since scene geometry
+    cues like sky position are more reliable before exposure/contrast adjustments.
+    """
+    current = global_image
+    records: list[LocalizedApplicationRecord] = []
+    for local_adjustment in plan.localized_adjustments:
+        target = local_adjustment.target
+        try:
+            # A failed local mask must never fail the whole image, so this catch is broad by design.
+            mask_result = build_mask_for_target(target, base_image)
+        except Exception as exc:
+            records.append(
+                LocalizedApplicationRecord(
+                    target=target, status='skipped', reason=f'Mask generation failed: {exc}'
+                )
+            )
+            continue
+
+        if not mask_result.available:
+            reason = mask_result.reason or 'No confident mask available for target.'
+            records.append(
+                LocalizedApplicationRecord(
+                    target=target,
+                    status='skipped',
+                    mask_confidence=mask_result.confidence,
+                    reason=reason,
+                )
+            )
+            continue
+
+        layer = _apply_adjustments(current, local_adjustment.delta)
+        alpha = mask_result.mask[:, :, None]
+        current = current * (1.0 - alpha) + layer * alpha
+
+        mask_path_str = None
+        if mask_debug_dir is not None:
+            debug_dir = Path(mask_debug_dir).expanduser().resolve()
+            mask_path = debug_dir / f'{raw_stem}_{target.strip().lower()}.png'
+            save_mask_debug_image(mask_result.mask, mask_path)
+            mask_path_str = str(mask_path)
+
+        records.append(
+            LocalizedApplicationRecord(
+                target=target,
+                status='applied',
+                mask_confidence=mask_result.confidence,
+                mask_path=mask_path_str,
+            )
+        )
+
+    return current, records
+
+
+def apply_edit_plan(
+    raw_path: Path,
+    output_path: Path,
+    plan: EditPlan,
+    quality: int = 95,
+    mask_debug_dir: Path | None = None,
+) -> list[LocalizedApplicationRecord]:
     raw_path = raw_path.expanduser().resolve()
     output_path = output_path.expanduser().resolve()
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -80,11 +156,17 @@ def apply_edit_plan(raw_path: Path, output_path: Path, plan: EditPlan, quality: 
             gamma=(2.222, 4.5),
         )
 
-    adjustments = plan.final_settings()
-    image = _as_float(rgb)
-    image = _white_balance(image, adjustments)
-    image = _tone_curve(image, adjustments)
-    image = _color_presence(image, adjustments)
-    image = np.clip(_clarity(image, adjustments.clarity), 0.0, 1.0)
+    base_image = _as_float(rgb)
+    global_image = _apply_adjustments(base_image, plan.final_settings())
 
-    Image.fromarray((image * 255).astype(np.uint8)).save(output_path, quality=quality, optimize=True)
+    final_image = global_image
+    localized_application: list[LocalizedApplicationRecord] = []
+    if plan.localized_adjustments:
+        final_image, localized_application = _apply_localized_adjustments(
+            base_image, global_image, plan, raw_path.stem, mask_debug_dir
+        )
+
+    final_image = np.clip(final_image, 0.0, 1.0)
+    output_bytes = (final_image * 255).astype(np.uint8)
+    Image.fromarray(output_bytes).save(output_path, quality=quality, optimize=True)
+    return localized_application
